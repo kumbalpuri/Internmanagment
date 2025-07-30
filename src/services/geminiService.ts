@@ -211,6 +211,8 @@ Guidelines:
 - Ask clarifying questions when needed
 - Suggest relevant actions based on the conversation
 - Keep responses under 100 words for voice delivery`;
+  }
+}
 - Act as Jerry, the automated workflow agent
 - Handle all aspects of the intern management process`;
   }
@@ -221,7 +223,7 @@ Guidelines:
     context: ConversationContext
   ): string {
     const historyText = history.length > 0 ? 
-      `\nConversation History:\n${history.join('\n')}\n` : '';
+      \`\nConversation History:\n${history.join('\n')}\n` : '';
     
     return `${historyText}
 Current User Input: "${userInput}"
@@ -253,7 +255,7 @@ Response should be natural and conversational for voice delivery.`;
               {
                 parts: [
                   {
-                    text: `${systemPrompt}\n\n${conversationPrompt}`
+                    text: \`${systemPrompt}\n\n${conversationPrompt}`
                   }
                 ]
               }
@@ -269,7 +271,7 @@ Response should be natural and conversational for voice delivery.`;
       );
 
       if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+        throw new Error(\`Gemini API error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -287,7 +289,7 @@ Response should be natural and conversational for voice delivery.`;
     } catch (error) {
       console.error('Gemini API call failed:', error);
       // Fallback to mock response
-      const fullPrompt = `${systemPrompt}\n\n${conversationPrompt}`;
+      const fullPrompt = \`${systemPrompt}\n\n${conversationPrompt}`;
       return this.generateMockResponse(fullPrompt);
     }
   }
@@ -439,7 +441,7 @@ Response should be natural and conversational for voice delivery.`;
 
     // Default intelligent response
     return {
-      text: `I understand you mentioned: "${prompt.split('Current User Input: "')[1]?.split('"')[0] || 'your query'}". I'm here to help with student management, job descriptions, meeting scheduling, and application processes. Could you please provide more specific details about what you'd like assistance with?`,
+      text: \`I understand you mentioned: "${prompt.split('Current User Input: "')[1]?.split('"')[0] || 'your query'}". I'm here to help with student management, job descriptions, meeting scheduling, and application processes. Could you please provide more specific details about what you\'d like assistance with?`,
       confidence: 0.6
     };
   }
