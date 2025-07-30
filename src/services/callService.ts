@@ -151,6 +151,18 @@ export class CallService {
         this.addToTranscript(sessionId, 'system', 'Meeting scheduling initiated - Teams invite will be sent', 'action');
         break;
       
+      case 'schedule_teams_meeting':
+        this.addToTranscript(sessionId, 'system', 'Microsoft Teams meeting scheduled - Invitations sent to student and interview panel', 'action');
+        break;
+      
+      case 'evaluate_resume':
+        this.addToTranscript(sessionId, 'system', 'Resume evaluation completed - Shortlist prepared based on job requirements', 'action');
+        break;
+      
+      case 'shortlist_students':
+        this.addToTranscript(sessionId, 'system', 'Student shortlist created with detailed evaluation reasons', 'action');
+        break;
+      
       case 'get_student_info':
         this.addToTranscript(sessionId, 'system', 'Student information retrieved from database', 'action');
         break;

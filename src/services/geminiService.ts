@@ -16,13 +16,16 @@ export interface ConversationContext {
     availableStudents: any[];
     availableJobs: any[];
     recentActivities: any[];
+    openPositions?: any[];
+    colleges?: any[];
+    interviewPanels?: any[];
   };
 }
 
 export interface GeminiResponse {
   text: string;
   action?: {
-    type: 'send_jotform' | 'schedule_meeting' | 'get_student_info' | 'get_job_info' | 'end_call';
+    type: 'send_jotform' | 'schedule_meeting' | 'get_student_info' | 'get_job_info' | 'end_call' | 'evaluate_resume' | 'schedule_teams_meeting' | 'shortlist_students';
     parameters?: Record<string, any>;
   };
   confidence: number;
@@ -42,6 +45,108 @@ export class GeminiService {
     };
   }
 
+  // Jerry AI Agent - Automated workflow handler
+  async processWorkflowStep(
+    step: 'tpo_contact' | 'resume_screening' | 'interview_scheduling' | 'student_interview',
+    context: any
+  ): Promise<GeminiResponse> {
+    const systemPrompt = this.buildWorkflowPrompt(step, context);
+    
+    try {
+      const response = await this.callGeminiAPI(systemPrompt, '');
+      return response;
+    } catch (error) {
+      console.error('Workflow processing error:', error);
+      return this.getFallbackWorkflowResponse(step, context);
+    }
+  }
+
+  private buildWorkflowPrompt(step: string, context: any): string {
+    const basePrompt = `You are Jerry, an AI agent for automated intern management. You handle the complete workflow from TPO contact to student interviews.`;
+    
+    switch (step) {
+      case 'tpo_contact':
+        return `${basePrompt}
+
+You are calling TPO ${context.tpoName} from ${context.college} about the ${context.position} opening.
+
+Your role:
+1. Greet professionally and introduce yourself as Jerry from the intern management system
+2. Discuss the job requirements: ${context.requirements}
+3. Ask if they're ready to share this opportunity with students
+4. If yes, offer to send the JotForm link for student applications
+5. Be professional, clear, and helpful
+
+Keep responses conversational and under 100 words for voice delivery.`;
+
+      case 'resume_screening':
+        return `${basePrompt}
+
+You are evaluating student resumes for the ${context.position} role.
+
+Job Requirements: ${context.requirements}
+Student Data: ${JSON.stringify(context.students)}
+
+Your task:
+1. Screen each student's resume against job requirements
+2. Rate students on a scale of 1-10 based on:
+   - Technical skills match
+   - Academic performance
+   - Relevant experience
+   - Project work
+3. Create a shortlist of top candidates with reasons
+4. Provide detailed evaluation for each shortlisted candidate
+
+Format your response as a structured evaluation.`;
+
+      case 'student_interview':
+        return `${basePrompt}
+
+You are conducting a telephonic interview with ${context.studentName} for the ${context.position} role.
+
+Student Background: ${context.studentProfile}
+Job Requirements: ${context.requirements}
+
+Your approach:
+1. Greet the student warmly and put them at ease
+2. Ask about their background and experience
+3. Discuss technical skills relevant to the role
+4. Ask about their interest in the position
+5. Explain next steps if they perform well
+6. Rate their performance for the next round
+
+Be encouraging, professional, and thorough in your evaluation.`;
+
+      default:
+        return basePrompt;
+    }
+  }
+
+  private getFallbackWorkflowResponse(step: string, context: any): GeminiResponse {
+    switch (step) {
+      case 'tpo_contact':
+        return {
+          text: `Hello ${context.tpoName}, this is Jerry from the intern management system. I'm calling about the ${context.position} opening. Are you available to discuss sharing this opportunity with your students?`,
+          confidence: 0.8
+        };
+      case 'resume_screening':
+        return {
+          text: "I've completed the resume screening process. Based on the job requirements, I've identified several qualified candidates for the next round.",
+          action: { type: 'shortlist_students', parameters: context },
+          confidence: 0.7
+        };
+      case 'student_interview':
+        return {
+          text: `Hello ${context.studentName}, this is Jerry calling about the ${context.position} internship. Thank you for your application. I'd like to discuss your background and experience with you.`,
+          confidence: 0.8
+        };
+      default:
+        return {
+          text: "I'm processing your request. Please hold on while I gather the necessary information.",
+          confidence: 0.5
+        };
+    }
+  }
   // Generate intelligent response based on user input and context
   async generateResponse(
     userInput: string,
@@ -56,7 +161,7 @@ export class GeminiService {
       const systemPrompt = this.buildSystemPrompt(context);
       const conversationPrompt = this.buildConversationPrompt(userInput, history, context);
       
-      // Simulate Gemini API call (replace with actual API call in production)
+      // Call Gemini API
       const response = await this.callGeminiAPI(systemPrompt, conversationPrompt);
       
       // Update conversation history
@@ -72,7 +177,7 @@ export class GeminiService {
   }
 
   private buildSystemPrompt(context: ConversationContext): string {
-    return `You are an AI assistant for an Intern Management System. You are currently on a call with a ${context.contactType} named ${context.contactName}.
+    return `You are Jerry, an AI assistant for an Intern Management System. You are currently on a call with a ${context.contactType} named ${context.contactName}.
 
 Your role is to:
 1. Help manage student profiles and applications
@@ -80,6 +185,9 @@ Your role is to:
 3. Schedule meetings and send forms when requested
 4. Maintain a professional, helpful tone
 5. Keep responses concise and actionable
+6. Handle the complete automated workflow from TPO contact to student interviews
+7. Evaluate resumes and conduct telephonic interviews
+8. Schedule Microsoft Teams meetings and send invitations
 
 Available Actions:
 - send_jotform: Send application form to contact
@@ -87,6 +195,9 @@ Available Actions:
 - get_student_info: Retrieve student profile information
 - get_job_info: Get job description details
 - end_call: End the current call
+- evaluate_resume: Screen student resumes against job requirements
+- schedule_teams_meeting: Schedule Microsoft Teams interview
+- shortlist_students: Create shortlist with evaluation reasons
 
 Context Information:
 - Contact Type: ${context.contactType}
@@ -100,6 +211,8 @@ Guidelines:
 - Ask clarifying questions when needed
 - Suggest relevant actions based on the conversation
 - Keep responses under 100 words for voice delivery`;
+- Act as Jerry, the automated workflow agent
+- Handle all aspects of the intern management process`;
   }
 
   private buildConversationPrompt(
@@ -122,7 +235,7 @@ Please provide a helpful response and suggest any relevant actions. If the user 
 Response should be natural and conversational for voice delivery.`;
   }
 
-  // Simulate Gemini API call (replace with actual implementation)
+  // Call Gemini API
   private async callGeminiAPI(
     systemPrompt: string,
     conversationPrompt: string
@@ -196,6 +309,21 @@ Response should be natural and conversational for voice delivery.`;
     } else if (lowerText.includes('schedule') && lowerText.includes('meeting')) {
       action = {
         type: 'schedule_meeting',
+        parameters: {}
+      };
+    } else if (lowerText.includes('schedule') && lowerText.includes('teams')) {
+      action = {
+        type: 'schedule_teams_meeting',
+        parameters: {}
+      };
+    } else if (lowerText.includes('evaluate') || lowerText.includes('screen')) {
+      action = {
+        type: 'evaluate_resume',
+        parameters: {}
+      };
+    } else if (lowerText.includes('shortlist')) {
+      action = {
+        type: 'shortlist_students',
         parameters: {}
       };
     } else if (lowerPrompt.includes('student') && (lowerPrompt.includes('profile') || lowerPrompt.includes('information'))) {

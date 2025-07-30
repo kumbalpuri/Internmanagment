@@ -9,6 +9,9 @@ import { CallManagement } from './components/Calls/CallManagement';
 import { MeetingsList } from './components/Meetings/MeetingsList';
 import { OfferManagement } from './components/Offers/OfferManagement';
 import { VoiceSettings } from './components/Settings/VoiceSettings';
+import { AutomatedWorkflow } from './components/Workflow/AutomatedWorkflow';
+import { InputManagement } from './components/InputManagement/InputManagement';
+import { JotFormIntegration } from './components/JotForm/JotFormIntegration';
 import { Student, JobDescription } from './types';
 
 function App() {
@@ -68,6 +71,12 @@ function App() {
         return <MeetingsList />;
       case 'offers':
         return <OfferManagement />;
+      case 'workflow':
+        return <AutomatedWorkflow />;
+      case 'inputs':
+        return <InputManagement />;
+      case 'jotform':
+        return <JotFormIntegration />;
       case 'reports':
         return (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
@@ -98,6 +107,9 @@ function App() {
       calls: 'Call Management',
       meetings: 'Meeting Scheduler',
       offers: 'Offer Management',
+      workflow: 'Automated Workflow',
+      inputs: 'Input Management',
+      jotform: 'JotForm Integration',
       reports: 'Reports & Analytics',
       settings: 'Settings',
     };
@@ -112,6 +124,9 @@ function App() {
       calls: 'Schedule and track communications',
       meetings: 'Coordinate mentor meetings',
       offers: 'Create and track internship offers',
+      workflow: 'Jerry-powered automated intern management',
+      inputs: 'Add and manage system data',
+      jotform: 'Student application data from JotForm',
       reports: 'Analyze performance and metrics',
       settings: 'Configure system preferences',
     };

@@ -8,7 +8,10 @@ import {
   Award,
   BarChart3,
   Settings,
-  ChevronRight
+  ChevronRight,
+  Bot,
+  Database,
+  ExternalLink
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -20,6 +23,9 @@ const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'students', label: 'Students', icon: Users },
   { id: 'jobs', label: 'Job Descriptions', icon: Briefcase },
+  { id: 'workflow', label: 'Automated Workflow', icon: Bot },
+  { id: 'inputs', label: 'Input Management', icon: Database },
+  { id: 'jotform', label: 'JotForm Integration', icon: ExternalLink },
   { id: 'calls', label: 'Call Management', icon: Phone },
   { id: 'meetings', label: 'Meetings', icon: Calendar },
   { id: 'offers', label: 'Offers', icon: Award },

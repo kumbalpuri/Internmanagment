@@ -93,3 +93,59 @@ export interface User {
   role: 'admin' | 'tpo';
   permissions: string[];
 }
+
+export interface College {
+  id: string;
+  name: string;
+  location: string;
+  tpoContact: string;
+  email: string;
+  phone: string;
+  createdAt: string;
+}
+
+export interface InterviewPanel {
+  id: string;
+  jobId: string;
+  panelists: {
+    name: string;
+    email: string;
+    role: string;
+    company: string;
+  }[];
+  scheduledDate?: string;
+  meetingLink?: string;
+  createdAt: string;
+}
+
+export interface WorkflowStep {
+  id: string;
+  jobId: string;
+  step: 'tpo_contact' | 'jotform_sent' | 'applications_received' | 'resume_screening' | 'shortlist_created' | 'interviews_scheduled' | 'interviews_completed' | 'offers_sent';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  completedAt?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface JotFormResponse {
+  id: string;
+  jobId: string;
+  studentData: {
+    name: string;
+    email: string;
+    phone: string;
+    college: string;
+    course: string;
+    year: number;
+    cgpa: number;
+    skills: string[];
+    experience: string;
+    resume: string;
+  };
+  submittedAt: string;
+  screened: boolean;
+  shortlisted: boolean;
+  rating?: number;
+  evaluationNotes?: string;
+}
