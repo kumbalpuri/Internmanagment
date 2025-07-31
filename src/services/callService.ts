@@ -87,9 +87,6 @@ export class CallService {
     const session = this.activeSessions.get(sessionId);
     if (!session) return;
 
-    // Add processing indicator
-    this.addToTranscript(sessionId, 'system', 'Processing with Gemini AI...', 'action');
-    try {
       // Build context for Gemini
       const context: ConversationContext = {
         contactType: session.contactType,
@@ -111,11 +108,6 @@ export class CallService {
       );
 
       // Remove processing indicator
-      const session = this.activeSessions.get(sessionId);
-      if (session) {
-        session.transcript = session.transcript.filter(t => t.text !== 'Processing with Gemini AI...');
-      }
-      // Execute any suggested actions
       if (geminiResponse.action) {
         await this.executeAction(sessionId, geminiResponse.action);
       }
@@ -126,12 +118,6 @@ export class CallService {
 
     } catch (error) {
       console.error('Error processing voice command with Gemini:', error);
-      
-      // Remove processing indicator on error
-      const session = this.activeSessions.get(sessionId);
-      if (session) {
-        session.transcript = session.transcript.filter(t => t.text !== 'Processing with Gemini AI...');
-      }
       
       // Fallback to simple response
       const fallbackResponse = `I understand you said: "${transcript}". How can I assist you further with student management, job descriptions, or meeting scheduling?`;
@@ -195,6 +181,12 @@ export class CallService {
   // Speak a message using TTS
   private async speakMessage(message: string): Promise<void> {
     try {
+      // Stop any current speech before starting new one
+      speechService.stopSpeaking();
+      
+      // Small delay to ensure previous speech is fully stopped
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       await speechService.speak(message, {
         rate: 0.9,
         pitch: 1.0,
