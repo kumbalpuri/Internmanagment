@@ -87,6 +87,7 @@ export class CallService {
     const session = this.activeSessions.get(sessionId);
     if (!session) return;
 
+    try {
       // Build context for Gemini
       const context: ConversationContext = {
         contactType: session.contactType,
