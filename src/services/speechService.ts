@@ -82,7 +82,9 @@ export class SpeechService {
       utterance.onend = () => resolve();
       utterance.onerror = (event) => reject(new Error(`Speech synthesis error: ${event.error}`));
 
-      this.synthesis.speak(utterance);
+      setTimeout(() => {
+        this.synthesis.speak(utterance);
+      }, 10);
     });
   }
 

@@ -182,12 +182,6 @@ export class CallService {
   // Speak a message using TTS
   private async speakMessage(message: string): Promise<void> {
     try {
-      // Stop any current speech before starting new one
-      speechService.stopSpeaking();
-      
-      // Small delay to ensure previous speech is fully stopped
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
       await speechService.speak(message, {
         rate: 0.9,
         pitch: 1.0,
