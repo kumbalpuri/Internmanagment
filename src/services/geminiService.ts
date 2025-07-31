@@ -151,7 +151,8 @@ Be encouraging, professional, and thorough in your evaluation.`;
   async generateResponse(
     userInput: string,
     context: ConversationContext,
-    sessionId: string
+    sessionId: string,
+    shortResponse: boolean = false
   ): Promise<GeminiResponse> {
     try {
       // Get conversation history for this session
@@ -159,7 +160,7 @@ Be encouraging, professional, and thorough in your evaluation.`;
       
       // Build comprehensive prompt with context
       const systemPrompt = this.buildSystemPrompt(context);
-      const conversationPrompt = this.buildConversationPrompt(userInput, history, context);
+      const conversationPrompt = this.buildConversationPrompt(userInput, history, context, shortResponse);
       
       // Call Gemini API
       const response = await this.callGeminiAPI(systemPrompt, conversationPrompt);
@@ -177,15 +178,15 @@ Be encouraging, professional, and thorough in your evaluation.`;
   }
 
   private buildSystemPrompt(context: ConversationContext): string {
-    return `You are Jerry, an AI assistant for an Intern Management System. You are currently on a call with a ${context.contactType} named ${context.contactName}.
+    return `You are Jerry, an AI assistant from Solar Industries India Ltd for an Intern Management System. You are currently on a call with a ${context.contactType} named ${context.contactName}.
 
 Your role is to:
 1. Help manage student profiles and applications
 2. Provide information about job descriptions and requirements
 3. Schedule meetings and send forms when requested
 4. Maintain a professional, helpful tone
-5. Keep responses concise and actionable
-6. Handle the complete automated workflow from TPO contact to student interviews
+5. Keep responses very short and concise (1-2 sentences maximum)
+6. Stop speaking immediately if interrupted
 7. Evaluate resumes and conduct telephonic interviews
 8. Schedule Microsoft Teams meetings and send invitations
 
@@ -208,9 +209,9 @@ Context Information:
 Guidelines:
 - Always be professional and courteous
 - Provide specific, actionable information
-- Ask clarifying questions when needed
+- Keep responses under 30 words for voice delivery
 - Suggest relevant actions based on the conversation
-- Keep responses under 100 words for voice delivery
+- Be concise and to the point
 - Act as Jerry, the automated workflow agent
 - Handle all aspects of the intern management process`;
   }
@@ -218,7 +219,8 @@ Guidelines:
   private buildConversationPrompt(
     userInput: string,
     history: string[],
-    context: ConversationContext
+    context: ConversationContext,
+    shortResponse: boolean = false
   ): string {
     const historyText = history.length > 0 ? 
       `\nConversation History:\n${history.join('\n')}\n` : '';
@@ -226,13 +228,15 @@ Guidelines:
     return `${historyText}
 Current User Input: "${userInput}"
 
-Please provide a helpful response and suggest any relevant actions. If the user is asking about:
+${shortResponse ? 'IMPORTANT: Keep your response very short (maximum 20 words). Be direct and concise.' : ''}
+
+Please provide a helpful response. If the user is asking about:
 - Student information: Offer to retrieve specific student details
 - Job descriptions: Provide job information or requirements
 - Applications: Suggest sending JotForm or scheduling meetings
 - General queries: Provide informative responses about the intern management process
 
-Response should be natural and conversational for voice delivery.`;
+Response should be natural, conversational, and very brief for voice delivery.`;
   }
 
   // Call Gemini API

@@ -131,7 +131,7 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
   const getTranscriptIcon = (entry: CallTranscript) => {
     if (entry.speaker === 'agent') {
       return <User className="w-4 h-4 text-blue-600" />;
-    } else {
+    } else if (entry.speaker === 'jerry') {
       return <Bot className="w-4 h-4 text-green-600" />;
     }
   };
@@ -242,7 +242,7 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
         <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
           {session?.transcript.length === 0 ? (
             <p className="text-gray-500 text-center py-8">
-              Gemini 2.5 Flash powered conversation transcript will appear here. The advanced LLM will provide intelligent, context-aware responses to any query about students, jobs, and intern management.
+              Jerry from Solar Industries India Ltd will provide intelligent, context-aware responses to any query about students, jobs, and intern management.
             </p>
           ) : (
             <div className="space-y-3">
@@ -252,9 +252,7 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
                   className={`flex items-start space-x-3 p-3 rounded-lg ${
                     entry.speaker === 'agent'
                       ? 'bg-blue-50 border-l-4 border-blue-400'
-                      : entry.type === 'action'
-                      ? 'bg-yellow-50 border-l-4 border-yellow-400'
-                      : 'bg-purple-50 border-l-4 border-purple-400'
+                      : 'bg-green-50 border-l-4 border-green-400'
                   }`}
                 >
                   <div className="flex-shrink-0 mt-1">
@@ -263,32 +261,14 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
                     ) : entry.type === 'action' ? (
                       <Zap className="w-4 h-4 text-yellow-600" />
                     ) : (
-                      <div className="relative">
-                        <Brain className="w-4 h-4 text-purple-600" />
-                        {isProcessingAI && entry === session?.transcript[session.transcript.length - 1] && (
-                          <div className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full animate-ping"></div>
-                        )}
-                      </div>
+                      <Bot className="w-4 h-4 text-green-600" />
                     )}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
-                      <span className="text-sm font-medium text-gray-900 capitalize">
-                        {entry.speaker === 'agent' ? 'Agent' : entry.type === 'action' ? 'System Action' : 'Gemini 2.5 Flash'}
-                      </span>
                       <span className="text-xs text-gray-500">
                         {entry.timestamp.toLocaleTimeString()}
                       </span>
-                      {entry.type === 'action' && (
-                        <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">
-                          Action
-                        </span>
-                      )}
-                      {entry.speaker === 'system' && entry.type === 'speech' && (
-                        <span className="text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded-full">
-                          Gemini Response
-                        </span>
-                      )}
                     </div>
                     <p className="text-gray-700 text-sm">{entry.text}</p>
                   </div>
@@ -340,7 +320,7 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
           </div>
         </div>
         <div className="mt-2 text-xs text-purple-600 bg-purple-50 p-2 rounded border border-purple-200">
-          💡 <strong>Powered by Gemini 2.5 Flash:</strong> You can speak naturally about anything! Ask questions like "Tell me about available internships", "What are the requirements for the developer position?", or any other query - the AI will understand and respond intelligently.
+          💡 <strong>Jerry from Solar Industries India Ltd:</strong> You can speak naturally about anything! Ask questions like "Tell me about available internships", "What are the requirements for the developer position?", or any other query - Jerry will understand and respond intelligently.
         </div>
       </div>
     </div>

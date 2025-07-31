@@ -1,5 +1,6 @@
 import { speechService } from './speechService';
 import { geminiService, ConversationContext } from './geminiService';
+import { supabase } from '../lib/supabase';
 import { mockStudents, mockJobDescriptions } from '../data/mockData';
 
 export interface CallSession {
@@ -15,9 +16,9 @@ export interface CallSession {
 export interface CallTranscript {
   id: string;
   timestamp: Date;
-  speaker: 'agent' | 'system';
+  speaker: 'agent' | 'jerry';
   text: string;
-  type: 'speech' | 'action' | 'note';
+  type: 'speech';
 }
 
 export class CallService {
@@ -41,13 +42,13 @@ export class CallService {
     this.activeSessions.set(sessionId, session);
     this.currentSession = session;
 
-    // Add initial system message
-    this.addToTranscript(sessionId, 'system', `Call initiated with ${contactType}`, 'action');
+    // Get contact name for personalized greeting
+    const contactName = await this.getContactName(session);
 
-    // Welcome message
-    const welcomeMessage = `Hello, this is an automated call from the Intern Management System. How can I assist you today?`;
+    // Personalized welcome message from Jerry
+    const welcomeMessage = `Hi ${contactName}, This is Jerry an AI assistant from Solar Industries India Ltd. How can I assist you today?`;
     await this.speakMessage(welcomeMessage);
-    this.addToTranscript(sessionId, 'system', welcomeMessage, 'speech');
+    this.addToTranscript(sessionId, 'jerry', welcomeMessage, 'speech');
 
     return session;
   }
@@ -61,19 +62,15 @@ export class CallService {
       await speechService.startListening({
         onResult: (transcript, isFinal) => {
           if (isFinal) {
-            this.addToTranscript(sessionId, 'agent', transcript, 'speech');
             this.processVoiceCommand(sessionId, transcript);
           }
         },
         onError: (error) => {
           console.error('Speech recognition error:', error);
-          this.addToTranscript(sessionId, 'system', `Speech recognition error: ${error}`, 'action');
         },
         onStart: () => {
-          this.addToTranscript(sessionId, 'system', 'Voice recognition started', 'action');
         },
         onEnd: () => {
-          this.addToTranscript(sessionId, 'system', 'Voice recognition ended', 'action');
         }
       });
     } catch (error) {
@@ -87,7 +84,8 @@ export class CallService {
     const session = this.activeSessions.get(sessionId);
     if (!session) return;
 
-    try {
+    // Add user input to transcript
+    this.addToTranscript(sessionId, 'agent', transcript, 'speech');
       // Build context for Gemini
       const context: ConversationContext = {
         contactType: session.contactType,
@@ -105,7 +103,8 @@ export class CallService {
       const geminiResponse = await geminiService.generateResponse(
         transcript,
         context,
-        sessionId
+        sessionId,
+        true // Request short response
       );
 
       // Remove processing indicator
@@ -115,7 +114,7 @@ export class CallService {
 
       // Speak the response
       await this.speakMessage(geminiResponse.text);
-      this.addToTranscript(sessionId, 'system', geminiResponse.text, 'speech');
+      this.addToTranscript(sessionId, 'jerry', geminiResponse.text, 'speech');
 
     } catch (error) {
       console.error('Error processing voice command with Gemini:', error);
@@ -123,7 +122,7 @@ export class CallService {
       // Fallback to simple response
       const fallbackResponse = `I understand you said: "${transcript}". How can I assist you further with student management, job descriptions, or meeting scheduling?`;
       await this.speakMessage(fallbackResponse);
-      this.addToTranscript(sessionId, 'system', fallbackResponse, 'speech');
+      this.addToTranscript(sessionId, 'jerry', fallbackResponse, 'speech');
     }
   }
 
@@ -131,31 +130,24 @@ export class CallService {
   private async executeAction(sessionId: string, action: any): Promise<void> {
     switch (action.type) {
       case 'send_jotform':
-        this.addToTranscript(sessionId, 'system', 'JotForm sent to contact via email and SMS', 'action');
         break;
       
       case 'schedule_meeting':
-        this.addToTranscript(sessionId, 'system', 'Meeting scheduling initiated - Teams invite will be sent', 'action');
         break;
       
       case 'schedule_teams_meeting':
-        this.addToTranscript(sessionId, 'system', 'Microsoft Teams meeting scheduled - Invitations sent to student and interview panel', 'action');
         break;
       
       case 'evaluate_resume':
-        this.addToTranscript(sessionId, 'system', 'Resume evaluation completed - Shortlist prepared based on job requirements', 'action');
         break;
       
       case 'shortlist_students':
-        this.addToTranscript(sessionId, 'system', 'Student shortlist created with detailed evaluation reasons', 'action');
         break;
       
       case 'get_student_info':
-        this.addToTranscript(sessionId, 'system', 'Student information retrieved from database', 'action');
         break;
       
       case 'get_job_info':
-        this.addToTranscript(sessionId, 'system', 'Job description information accessed', 'action');
         break;
       
       case 'end_call':
@@ -168,7 +160,7 @@ export class CallService {
   }
 
   // Get contact name helper
-  private getContactName(session: CallSession): string {
+  private async getContactName(session: CallSession): Promise<string> {
     if (session.contactType === 'student') {
       const student = mockStudents.find(s => s.id === session.contactId);
       return student?.name || 'Unknown Student';
@@ -193,7 +185,7 @@ export class CallService {
   }
 
   // Add entry to call transcript
-  private addToTranscript(sessionId: string, speaker: 'agent' | 'system', text: string, type: 'speech' | 'action' | 'note'): void {
+  private addToTranscript(sessionId: string, speaker: 'agent' | 'jerry', text: string, type: 'speech'): void {
     const session = this.activeSessions.get(sessionId);
     if (!session) return;
 
@@ -202,7 +194,7 @@ export class CallService {
       timestamp: new Date(),
       speaker,
       text,
-      type
+      type: 'speech'
     };
 
     session.transcript.push(transcriptEntry);
@@ -213,6 +205,9 @@ export class CallService {
     const session = this.activeSessions.get(sessionId);
     if (!session) return;
 
+    // Save call log to database
+    await this.saveCallLog(session);
+
     session.status = 'ended';
     session.duration = Math.floor((new Date().getTime() - session.startTime.getTime()) / 1000);
 
@@ -222,10 +217,28 @@ export class CallService {
 
     // Clear Gemini conversation history
     geminiService.clearConversationHistory(sessionId);
-    this.addToTranscript(sessionId, 'system', `Call ended. Duration: ${session.duration} seconds`, 'action');
 
     if (this.currentSession?.id === sessionId) {
       this.currentSession = null;
+    }
+  }
+
+  // Save call log to database
+  private async saveCallLog(session: CallSession): Promise<void> {
+    try {
+      await supabase.from('call_logs').insert({
+        student_id: session.contactType === 'student' ? session.contactId : null,
+        tpo_id: session.contactType === 'tpo' ? session.contactId : null,
+        contact_type: session.contactType,
+        duration: Math.floor((new Date().getTime() - session.startTime.getTime()) / 1000),
+        status: 'completed',
+        notes: `Call with ${session.contactType}`,
+        transcript: session.transcript,
+        jotform_sent: false,
+        completed_at: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error saving call log:', error);
     }
   }
 
