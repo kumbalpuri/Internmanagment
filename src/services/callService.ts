@@ -1,1 +1,242 @@
-{"code":"rate-limited","message":"You have hit the rate limit. Please upgrade to keep chatting.","providerLimitHit":false,"isRetryable":true}
+import { supabase } from '../lib/supabase';
+import { speechService } from './speechService';
+import { geminiService } from './geminiService';
+
+export interface CallSession {
+  id: string;
+  contactType: 'student' | 'tpo';
+  contactId?: string;
+  contactName: string;
+  contactPhone?: string;
+  startTime: Date;
+  endTime?: Date;
+  status: 'active' | 'completed' | 'failed';
+  transcript: CallTranscript[];
+  duration: number;
+  notes: string;
+}
+
+export interface CallTranscript {
+  timestamp: Date;
+  speaker: 'agent' | 'jerry';
+  text: string;
+  type: 'speech' | 'action';
+}
+
+export interface ConversationContext {
+  contactType: 'student' | 'tpo';
+  contactName: string;
+  transcript: CallTranscript[];
+  sessionDuration: number;
+}
+
+class CallService {
+  private activeSessions = new Map<string, CallSession>();
+  private isListening = false;
+
+  // Initialize a new call session
+  async initiateCall(contactType: 'student' | 'tpo', contactName: string, contactId?: string, contactPhone?: string): Promise<string> {
+    const sessionId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const session: CallSession = {
+      id: sessionId,
+      contactType,
+      contactId,
+      contactName,
+      contactPhone,
+      startTime: new Date(),
+      status: 'active',
+      transcript: [],
+      duration: 0,
+      notes: ''
+    };
+
+    this.activeSessions.set(sessionId, session);
+
+    // Start with Jerry's opening statement
+    const openingMessage = `Hi ${contactName}, This is Jerry an AI assistant from Solar Industries India Ltd.`;
+    await this.speakMessage(openingMessage);
+    this.addToTranscript(sessionId, 'jerry', openingMessage, 'speech');
+
+    // Start listening for voice input
+    this.startListening(sessionId);
+
+    return sessionId;
+  }
+
+  // Start listening for voice input
+  private startListening(sessionId: string): void {
+    if (this.isListening) return;
+    
+    this.isListening = true;
+    speechService.startListening({
+      onResult: async (transcript: string, isFinal: boolean) => {
+        if (isFinal && transcript.trim()) {
+          this.addToTranscript(sessionId, 'agent', transcript, 'speech');
+          await this.processVoiceCommand(sessionId, transcript);
+        }
+      },
+      onError: (error: string) => {
+        console.error('Speech recognition error:', error);
+        this.isListening = false;
+      }
+    });
+  }
+
+  // Process voice command with Gemini
+  private async processVoiceCommand(sessionId: string, transcript: string): Promise<void> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) return;
+
+    try {
+      // Build context for Gemini
+      const context: ConversationContext = {
+        contactType: session.contactType,
+        contactName: session.contactName,
+        transcript: session.transcript,
+        sessionDuration: Date.now() - session.startTime.getTime()
+      };
+
+      // Get response from Gemini
+      const geminiResponse = await geminiService.processCallInteraction(
+        transcript,
+        context
+      );
+
+      // Speak Jerry's response
+      await this.speakMessage(geminiResponse.response);
+      this.addToTranscript(sessionId, 'jerry', geminiResponse.response, 'speech');
+
+      // Execute any suggested actions
+      if (geminiResponse.action) {
+        await this.executeAction(sessionId, geminiResponse.action);
+      }
+
+    } catch (error) {
+      console.error('Error processing voice command with Gemini:', error);
+      
+      // Fallback to simple response
+      const fallbackResponse = `I understand. How can I assist you further?`;
+      await this.speakMessage(fallbackResponse);
+      this.addToTranscript(sessionId, 'jerry', fallbackResponse, 'speech');
+    }
+  }
+
+  // Execute actions suggested by Gemini
+  private async executeAction(sessionId: string, action: any): Promise<void> {
+    try {
+      switch (action.type) {
+        case 'schedule_meeting':
+          // Handle meeting scheduling
+          break;
+        case 'send_jotform':
+          // Handle JotForm sending
+          break;
+        case 'update_student_status':
+          // Handle student status updates
+          break;
+        default:
+          console.log('Unknown action type:', action.type);
+      }
+    } catch (error) {
+      console.error('Error executing action:', error);
+    }
+  }
+
+  // Speak a message using TTS
+  private async speakMessage(message: string): Promise<void> {
+    try {
+      await speechService.speak(message, {
+        rate: 0.9,
+        pitch: 1.0,
+        volume: 0.8
+      });
+    } catch (error) {
+      console.error('TTS Error:', error);
+      throw error;
+    }
+  }
+
+  // Add entry to call transcript
+  private addToTranscript(sessionId: string, speaker: 'agent' | 'jerry', text: string, type: 'speech' | 'action'): void {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) return;
+
+    session.transcript.push({
+      timestamp: new Date(),
+      speaker,
+      text,
+      type
+    });
+  }
+
+  // End a call session
+  async endCall(sessionId: string, notes?: string): Promise<void> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) return;
+
+    session.endTime = new Date();
+    session.duration = session.endTime.getTime() - session.startTime.getTime();
+    session.status = 'completed';
+    session.notes = notes || '';
+
+    // Stop listening
+    this.isListening = false;
+    speechService.stopListening();
+    speechService.stopSpeaking();
+
+    // Save to database
+    await this.saveCallToDatabase(session);
+
+    // Remove from active sessions
+    this.activeSessions.delete(sessionId);
+  }
+
+  // Save call session to database
+  private async saveCallToDatabase(session: CallSession): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('call_logs')
+        .insert({
+          student_id: session.contactType === 'student' ? session.contactId : null,
+          tpo_id: session.contactType === 'tpo' ? session.contactId : null,
+          contact_type: session.contactType,
+          duration: Math.floor(session.duration / 1000), // Convert to seconds
+          status: session.status === 'completed' ? 'completed' : 'missed',
+          notes: session.notes,
+          transcript: session.transcript,
+          scheduled_at: session.startTime,
+          completed_at: session.endTime
+        });
+
+      if (error) {
+        console.error('Error saving call to database:', error);
+      }
+    } catch (error) {
+      console.error('Database error:', error);
+    }
+  }
+
+  // Get active session
+  getActiveSession(sessionId: string): CallSession | undefined {
+    return this.activeSessions.get(sessionId);
+  }
+
+  // Get all active sessions
+  getActiveSessions(): CallSession[] {
+    return Array.from(this.activeSessions.values());
+  }
+
+  // Stop listening
+  stopListening(): void {
+    this.isListening = false;
+    speechService.stopListening();
+  }
+
+  // Stop speaking
+  stopSpeaking(): void {
+    speechService.stopSpeaking();
+  }
+}
+
+export const callService = new CallService();
