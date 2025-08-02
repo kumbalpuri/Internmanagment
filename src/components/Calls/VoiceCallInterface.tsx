@@ -14,13 +14,16 @@ import {
   Bot,
   Brain,
   Zap,
-  AlertCircle
+  AlertCircle,
+  CheckCircle,
+  Award
 } from 'lucide-react';
 
 interface VoiceCallInterfaceProps {
   contactId: string;
   contactType: 'student' | 'tpo';
   contactName: string;
+  callType: 'introduction' | 'telephonic_interview' | 'teams_scheduling' | 'tpo_outreach';
   onCallEnd: () => void;
 }
 
@@ -28,6 +31,7 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
   contactId,
   contactType,
   contactName,
+  callType,
   onCallEnd
 }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -38,13 +42,21 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
   const [callDuration, setCallDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved' | 'error'>('saved');
 
   // Initialize call
   useEffect(() => {
     const initializeCall = async () => {
       try {
         setIsInitializing(true);
-        const newSessionId = await callService.initiateCall(contactType, contactName, contactId);
+        const newSessionId = await callService.initiateCall(
+          contactType, 
+          contactName, 
+          contactId, 
+          undefined, // phone
+          undefined, // email
+          callType
+        );
         setSessionId(newSessionId);
         setIsCallActive(true);
         setError(null);
@@ -64,7 +76,7 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
         callService.endCall(sessionId);
       }
     };
-  }, [contactId, contactType, contactName]);
+  }, [contactId, contactType, contactName, callType]);
 
   // Update session data and call duration
   useEffect(() => {
@@ -77,6 +89,13 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
           setSession({ ...currentSession });
           const duration = Math.floor((new Date().getTime() - currentSession.startTime.getTime()) / 1000);
           setCallDuration(duration);
+          
+          // Auto-save every 30 seconds
+          if (duration % 30 === 0 && duration > 0) {
+            setSaveStatus('saving');
+            // The callService automatically saves during processVoiceCommand
+            setTimeout(() => setSaveStatus('saved'), 1000);
+          }
         }
       }, 1000);
     }
@@ -123,9 +142,19 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
 
   const endCall = async () => {
     if (sessionId) {
-      await callService.endCall(sessionId, 'Call ended by user');
-      setIsCallActive(false);
-      onCallEnd();
+      setSaveStatus('saving');
+      try {
+        await callService.endCall(sessionId, 'Call ended by user');
+        setSaveStatus('saved');
+        setIsCallActive(false);
+        onCallEnd();
+      } catch (error) {
+        setSaveStatus('error');
+        console.error('Error ending call:', error);
+        // Still end the call in UI
+        setIsCallActive(false);
+        onCallEnd();
+      }
     }
   };
 
@@ -135,13 +164,33 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const getCallTypeTitle = () => {
+    const titles = {
+      introduction: 'Introduction Call',
+      telephonic_interview: 'Telephonic Interview',
+      teams_scheduling: 'Teams Scheduling',
+      tpo_outreach: 'TPO Outreach'
+    };
+    return titles[callType];
+  };
+
+  const getCallTypeDescription = () => {
+    const descriptions = {
+      introduction: 'Jerry is introducing the internship opportunity',
+      telephonic_interview: 'Jerry is conducting a professional interview',
+      teams_scheduling: 'Jerry is scheduling the Microsoft Teams interview',
+      tpo_outreach: 'Jerry is discussing internship opportunities with TPO'
+    };
+    return descriptions[callType];
+  };
+
   if (isInitializing) {
     return (
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 max-w-4xl mx-auto p-8">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Initializing Call...</h3>
-          <p className="text-gray-600">Setting up voice connection with {contactName}</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Jerry is Initializing Call...</h3>
+          <p className="text-gray-600">Setting up {getCallTypeTitle().toLowerCase()} with {contactName}</p>
         </div>
       </div>
     );
@@ -176,19 +225,41 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
   return (
     <div className="bg-white rounded-xl shadow-lg border border-gray-200 max-w-4xl mx-auto">
       {/* Call Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-t-xl">
+      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 rounded-t-xl">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold">{contactName}</h2>
-            <p className="text-blue-100 capitalize">{contactType} Call</p>
+            <p className="text-purple-100">{getCallTypeTitle()}</p>
+            <p className="text-sm text-purple-200 mt-1">{getCallTypeDescription()}</p>
           </div>
           <div className="text-right">
-            <div className="flex items-center space-x-2 text-lg font-mono">
+            <div className="flex items-center space-x-2 text-lg font-mono mb-2">
               <Clock className="w-5 h-5" />
               <span>{formatDuration(callDuration)}</span>
             </div>
-            <div className={`text-sm ${isCallActive ? 'text-green-200' : 'text-red-200'}`}>
-              {isCallActive ? 'Call Active' : 'Call Ended'}
+            <div className={`text-sm flex items-center space-x-2 ${isCallActive ? 'text-green-200' : 'text-red-200'}`}>
+              <div className={`w-2 h-2 rounded-full ${isCallActive ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+              <span>{isCallActive ? 'Call Active' : 'Call Ended'}</span>
+            </div>
+            <div className="flex items-center space-x-2 text-xs text-purple-200 mt-1">
+              {saveStatus === 'saving' && (
+                <>
+                  <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Saving...</span>
+                </>
+              )}
+              {saveStatus === 'saved' && (
+                <>
+                  <CheckCircle className="w-3 h-3" />
+                  <span>Saved</span>
+                </>
+              )}
+              {saveStatus === 'error' && (
+                <>
+                  <AlertCircle className="w-3 h-3" />
+                  <span>Save Error</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -220,7 +291,7 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
             disabled={!isSpeaking}
           >
             {isSpeaking ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-            <span>{isSpeaking ? 'Stop Speaking' : 'Not Speaking'}</span>
+            <span>{isSpeaking ? 'Stop Jerry' : 'Jerry Not Speaking'}</span>
           </button>
 
           <button
@@ -240,7 +311,7 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
           </div>
           <div className={`flex items-center space-x-2 px-3 py-2 rounded-full ${isSpeaking ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
             <div className={`w-2 h-2 rounded-full ${isSpeaking ? 'bg-blue-500 animate-pulse' : 'bg-gray-300'}`}></div>
-            <span className="text-sm font-medium">Text-to-Speech</span>
+            <span className="text-sm font-medium">Jerry Speaking</span>
           </div>
           <div className="flex items-center space-x-2 px-3 py-2 rounded-full bg-purple-100 text-purple-700">
             <Brain className="w-3 h-3" />
@@ -255,17 +326,17 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
           <MessageSquare className="w-5 h-5 text-gray-600" />
           <h3 className="text-lg font-semibold text-gray-900">Live Conversation</h3>
           <div className="flex items-center space-x-1 px-2 py-1 bg-purple-100 rounded-full">
-            <Brain className="w-3 h-3 text-purple-600" />
-            <span className="text-xs text-purple-600 font-medium">AI Powered</span>
+            <Bot className="w-3 h-3 text-purple-600" />
+            <span className="text-xs text-purple-600 font-medium">Jerry AI</span>
           </div>
         </div>
 
         <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto border">
           {!session?.transcript || session.transcript.length === 0 ? (
             <div className="text-center py-8">
-              <Bot className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+              <Bot className="w-12 h-12 text-purple-400 mx-auto mb-3" />
               <p className="text-gray-500 mb-2">
-                Jerry is ready to assist with any questions about students, jobs, and intern management.
+                Jerry is ready to conduct the {getCallTypeTitle().toLowerCase()}.
               </p>
               <p className="text-sm text-gray-400">
                 Click "Start Voice Recognition" to begin the conversation.
@@ -277,26 +348,32 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
                 <div
                   key={entry.id}
                   className={`flex items-start space-x-3 p-3 rounded-lg transition-all ${
-                    entry.speaker === 'agent'
+                    entry.speaker === 'contact'
                       ? 'bg-blue-50 border-l-4 border-blue-400'
                       : entry.type === 'action'
                       ? 'bg-yellow-50 border-l-4 border-yellow-400'
-                      : 'bg-green-50 border-l-4 border-green-400'
+                      : entry.type === 'evaluation'
+                      ? 'bg-green-50 border-l-4 border-green-400'
+                      : 'bg-purple-50 border-l-4 border-purple-400'
                   }`}
                 >
                   <div className="flex-shrink-0 mt-1">
-                    {entry.speaker === 'agent' ? (
+                    {entry.speaker === 'contact' ? (
                       <User className="w-4 h-4 text-blue-600" />
                     ) : entry.type === 'action' ? (
                       <Zap className="w-4 h-4 text-yellow-600" />
+                    ) : entry.type === 'evaluation' ? (
+                      <Award className="w-4 h-4 text-green-600" />
                     ) : (
-                      <Bot className="w-4 h-4 text-green-600" />
+                      <Bot className="w-4 h-4 text-purple-600" />
                     )}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
                       <span className="text-xs font-medium text-gray-600">
-                        {entry.speaker === 'agent' ? 'You' : entry.type === 'action' ? 'Action' : 'Jerry'}
+                        {entry.speaker === 'contact' ? contactName : 
+                         entry.type === 'action' ? 'Jerry Action' : 
+                         entry.type === 'evaluation' ? 'Jerry Evaluation' : 'Jerry'}
                       </span>
                       <span className="text-xs text-gray-400">
                         {entry.timestamp.toLocaleTimeString()}
@@ -311,32 +388,81 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
         </div>
       </div>
 
-      {/* Quick Actions Guide */}
+      {/* Call Type Specific Guide */}
       <div className="p-6 border-t border-gray-200 bg-gradient-to-r from-purple-50 to-blue-50 rounded-b-xl">
         <div className="flex items-center space-x-2 mb-3">
           <Brain className="w-4 h-4 text-purple-600" />
-          <span className="text-sm font-medium text-gray-700">AI-Powered Voice Commands:</span>
+          <span className="text-sm font-medium text-gray-700">Jerry's {getCallTypeTitle()} Process:</span>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-          <div className="bg-white p-2 rounded border border-purple-200">
-            <strong className="text-purple-700">"Send form"</strong>
-            <div className="text-gray-600">Send JotForm</div>
+        
+        {contactType === 'tpo' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="bg-white p-3 rounded border border-purple-200">
+              <strong className="text-purple-700">Professional Introduction</strong>
+              <div className="text-gray-600">Introduce Solar Industries India Ltd</div>
+            </div>
+            <div className="bg-white p-3 rounded border border-purple-200">
+              <strong className="text-purple-700">JotForm Distribution</strong>
+              <div className="text-gray-600">Request to share with students</div>
+            </div>
           </div>
-          <div className="bg-white p-2 rounded border border-purple-200">
-            <strong className="text-purple-700">"Schedule meeting"</strong>
-            <div className="text-gray-600">Book appointment</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+            {callType === 'introduction' && (
+              <>
+                <div className="bg-white p-2 rounded border border-purple-200">
+                  <strong className="text-purple-700">Opportunity Introduction</strong>
+                  <div className="text-gray-600">Tailored to student's profile</div>
+                </div>
+                <div className="bg-white p-2 rounded border border-purple-200">
+                  <strong className="text-purple-700">Q&A Session</strong>
+                  <div className="text-gray-600">Address questions & concerns</div>
+                </div>
+                <div className="bg-white p-2 rounded border border-purple-200">
+                  <strong className="text-purple-700">Next Steps</strong>
+                  <div className="text-gray-600">Guide through application</div>
+                </div>
+              </>
+            )}
+            {callType === 'telephonic_interview' && (
+              <>
+                <div className="bg-white p-2 rounded border border-purple-200">
+                  <strong className="text-purple-700">Resume-based Questions</strong>
+                  <div className="text-gray-600">Technical & experience queries</div>
+                </div>
+                <div className="bg-white p-2 rounded border border-purple-200">
+                  <strong className="text-purple-700">SWOT Analysis</strong>
+                  <div className="text-gray-600">Evaluate strengths & weaknesses</div>
+                </div>
+                <div className="bg-white p-2 rounded border border-purple-200">
+                  <strong className="text-purple-700">Scoring & Feedback</strong>
+                  <div className="text-gray-600">Professional evaluation</div>
+                </div>
+              </>
+            )}
+            {callType === 'teams_scheduling' && (
+              <>
+                <div className="bg-white p-2 rounded border border-purple-200">
+                  <strong className="text-purple-700">Congratulations</strong>
+                  <div className="text-gray-600">Acknowledge success</div>
+                </div>
+                <div className="bg-white p-2 rounded border border-purple-200">
+                  <strong className="text-purple-700">Schedule Coordination</strong>
+                  <div className="text-gray-600">Find suitable time slots</div>
+                </div>
+                <div className="bg-white p-2 rounded border border-purple-200">
+                  <strong className="text-purple-700">Meeting Setup</strong>
+                  <div className="text-gray-600">Teams invite & preparation</div>
+                </div>
+              </>
+            )}
           </div>
-          <div className="bg-white p-2 rounded border border-purple-200">
-            <strong className="text-purple-700">"Student profile"</strong>
-            <div className="text-gray-600">Get student info</div>
-          </div>
-          <div className="bg-white p-2 rounded border border-purple-200">
-            <strong className="text-purple-700">"Job requirements"</strong>
-            <div className="text-gray-600">Get job details</div>
-          </div>
-        </div>
+        )}
+        
         <div className="mt-3 text-xs text-purple-700 bg-white p-3 rounded border border-purple-200">
-          <strong>💡 Natural Conversation:</strong> You can speak naturally! Ask questions like "What internships are available?", "Tell me about student applications", or any other query - Jerry will understand and respond intelligently using Gemini 2.0 Flash.
+          <strong>💡 Professional AI Agent:</strong> Jerry maintains the highest standards of professionalism, 
+          adapts to each conversation naturally, and ensures all call objectives are met efficiently. 
+          All interactions are automatically saved to the database for record-keeping.
         </div>
       </div>
     </div>

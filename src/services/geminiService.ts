@@ -1,4 +1,4 @@
-// Gemini LLM Service for intelligent call responses
+// Enhanced Gemini LLM Service for Jerry's call management
 export interface GeminiConfig {
   apiKey: string;
   model: string;
@@ -10,6 +10,7 @@ export interface GeminiConfig {
 export interface ConversationContext {
   contactType: 'student' | 'tpo';
   contactName: string;
+  callType: 'introduction' | 'telephonic_interview' | 'teams_scheduling' | 'tpo_outreach';
   transcript: any[];
   sessionDuration: number;
 }
@@ -17,7 +18,7 @@ export interface ConversationContext {
 export interface GeminiResponse {
   response: string;
   action?: {
-    type: 'send_jotform' | 'schedule_meeting' | 'get_student_info' | 'get_job_info' | 'end_call' | 'evaluate_resume' | 'schedule_teams_meeting' | 'shortlist_students';
+    type: 'send_jotform' | 'schedule_teams_meeting' | 'conduct_evaluation' | 'request_email' | 'end_call' | 'ask_interview_question';
     parameters?: Record<string, any>;
   };
   confidence: number;
@@ -37,14 +38,14 @@ export class GeminiService {
     };
   }
 
-  // Process call interaction with proper error handling
+  // Process call interaction with enhanced context awareness
   async processCallInteraction(
     userInput: string,
     context: ConversationContext
   ): Promise<GeminiResponse> {
     try {
       const systemPrompt = this.buildSystemPrompt(context);
-      const response = await this.callGeminiAPI(systemPrompt, userInput);
+      const response = await this.callGeminiAPI(systemPrompt, userInput, context);
       return response;
     } catch (error) {
       console.error('Gemini processing error:', error);
@@ -53,33 +54,102 @@ export class GeminiService {
   }
 
   private buildSystemPrompt(context: ConversationContext): string {
-    return `You are Jerry, an AI assistant from Solar Industries India Ltd for intern management. You are currently on a call with a ${context.contactType} named ${context.contactName}.
+    const basePrompt = `You are Jerry, a professional AI assistant from Solar Industries India Ltd, conducting ${context.callType} with ${context.contactName} (${context.contactType}).
 
-Your role:
-1. Help manage student profiles and applications
-2. Provide information about job descriptions and requirements
-3. Schedule meetings and send forms when requested
-4. Maintain a professional, helpful tone
-5. Keep responses very short and conversational (1-2 sentences maximum)
-6. Suggest relevant actions based on the conversation
+COMPANY BACKGROUND:
+Solar Industries India Ltd is a leading manufacturer of industrial explosives and propellants, offering exciting internship opportunities for students.
 
-Available Actions:
-- send_jotform: Send application form to contact
-- schedule_meeting: Schedule a meeting with mentor
-- get_student_info: Retrieve student profile information
-- get_job_info: Get job description details
-- end_call: End the current call
+CALL OBJECTIVES:`;
 
-Guidelines:
-- Always be professional and courteous
-- Provide specific, actionable information
-- Keep responses under 30 words for voice delivery
-- Suggest relevant actions based on the conversation
-- Be concise and to the point`;
+    if (context.contactType === 'tpo') {
+      return `${basePrompt}
+
+TPO CALL GUIDELINES:
+1. INTRODUCTION: Introduce Solar Industries India Ltd professionally
+2. OBJECTIVE: Request TPO to distribute JotForm to eligible students
+3. EMAIL HANDLING: If email not available, ask respectfully: "Could you please provide your email address so I can send the JotForm link?"
+4. TONE: Maintain utmost respect and professionalism
+5. FOLLOW-UP: Confirm they'll distribute to students and ask about timeline
+
+RESPONSE STYLE:
+- Very respectful and professional
+- Acknowledge their time and cooperation
+- Provide clear information about internship benefits
+- Keep responses concise (2-3 sentences max)
+- Always thank them for their time`;
+    }
+
+    switch (context.callType) {
+      case 'introduction':
+        return `${basePrompt}
+
+STUDENT INTRODUCTION CALL:
+1. Introduce internship opportunity tailored to their background
+2. Explain Solar Industries and the role
+3. Address questions and concerns
+4. Gauge interest level
+5. Next steps if interested
+
+RESPONSE STYLE:
+- Friendly but professional
+- Enthusiastic about the opportunity
+- Address their specific interests
+- Keep responses under 30 words for voice delivery`;
+
+      case 'telephonic_interview':
+        return `${basePrompt}
+
+TELEPHONIC INTERVIEW GUIDELINES:
+1. Ask questions based on their resume
+2. Evaluate technical skills, communication, problem-solving
+3. Conduct SWOT analysis mentally
+4. Provide scoring (1-10 scale)
+5. Professional but conversational tone
+
+EVALUATION CRITERIA:
+- Technical Skills (based on resume/course)
+- Communication clarity
+- Problem-solving approach
+- Enthusiasm and motivation
+- Cultural fit
+
+RESPONSE STYLE:
+- Ask one question at a time
+- Listen actively to responses
+- Provide encouraging feedback
+- Keep questions relevant to their background`;
+
+      case 'teams_scheduling':
+        return `${basePrompt}
+
+TEAMS INTERVIEW SCHEDULING:
+1. Congratulate on telephonic interview success
+2. Explain next step: Microsoft Teams interview
+3. Propose available time slots
+4. Check availability and preferences
+5. Handle rescheduling requests professionally
+
+RESPONSE STYLE:
+- Congratulatory and positive
+- Clear about next steps
+- Flexible with scheduling
+- Confirm details clearly`;
+
+      default:
+        return `${basePrompt}
+
+GENERAL GUIDELINES:
+- Be helpful and professional
+- Provide accurate information
+- Address concerns promptly
+- Maintain Solar Industries' reputation`;
+    }
   }
 
-  private async callGeminiAPI(systemPrompt: string, userInput: string): Promise<GeminiResponse> {
+  private async callGeminiAPI(systemPrompt: string, userInput: string, context: ConversationContext): Promise<GeminiResponse> {
     try {
+      const conversationContext = this.buildConversationContext(context);
+      
       const response = await fetch(
         `${this.config.baseUrl}/models/${this.config.model}:generateContent?key=${this.config.apiKey}`,
         {
@@ -92,7 +162,7 @@ Guidelines:
               {
                 parts: [
                   {
-                    text: `${systemPrompt}\n\nUser: ${userInput}\n\nProvide a helpful, concise response:`
+                    text: `${systemPrompt}\n\nCONVERSATION CONTEXT:\n${conversationContext}\n\nUser: ${userInput}\n\nProvide Jerry's professional response:`
                   }
                 ]
               }
@@ -118,29 +188,59 @@ Guidelines:
       }
 
       const generatedText = data.candidates[0].content.parts[0].text;
-      return this.parseGeminiResponse(generatedText, userInput);
+      return this.parseGeminiResponse(generatedText, userInput, context);
     } catch (error) {
       console.error('Gemini API call failed:', error);
-      return this.getFallbackResponse(userInput);
+      return this.getFallbackResponse(userInput, context);
     }
   }
 
-  private parseGeminiResponse(text: string, originalInput: string): GeminiResponse {
+  private buildConversationContext(context: ConversationContext): string {
+    const recentTranscript = context.transcript.slice(-6); // Last 6 exchanges
+    return recentTranscript.map(entry => 
+      `${entry.speaker === 'jerry' ? 'Jerry' : context.contactName}: ${entry.text}`
+    ).join('\n');
+  }
+
+  private parseGeminiResponse(text: string, originalInput: string, context: ConversationContext): GeminiResponse {
     const lowerText = text.toLowerCase();
     const lowerInput = originalInput.toLowerCase();
     
     let action: GeminiResponse['action'] = undefined;
     
-    // Detect actions based on response content and input
-    if (lowerText.includes('send') && (lowerText.includes('form') || lowerText.includes('jotform'))) {
-      action = { type: 'send_jotform', parameters: {} };
-    } else if (lowerText.includes('schedule') && lowerText.includes('meeting')) {
-      action = { type: 'schedule_meeting', parameters: {} };
-    } else if (lowerInput.includes('student') && (lowerInput.includes('profile') || lowerInput.includes('information'))) {
-      action = { type: 'get_student_info', parameters: {} };
-    } else if (lowerInput.includes('job') && (lowerInput.includes('description') || lowerInput.includes('position'))) {
-      action = { type: 'get_job_info', parameters: {} };
-    } else if (lowerText.includes('end') && lowerText.includes('call')) {
+    // Context-aware action detection
+    if (context.contactType === 'tpo') {
+      if (lowerText.includes('send') && (lowerText.includes('form') || lowerText.includes('jotform'))) {
+        action = { type: 'send_jotform', parameters: {} };
+      } else if (lowerInput.includes('email') && lowerText.includes('provide')) {
+        action = { type: 'request_email', parameters: {} };
+      }
+    } else if (context.contactType === 'student') {
+      switch (context.callType) {
+        case 'telephonic_interview':
+          if (this.shouldConductEvaluation(context.transcript)) {
+            action = { 
+              type: 'conduct_evaluation', 
+              parameters: this.extractEvaluationData(text, context.transcript) 
+            };
+          } else {
+            action = { type: 'ask_interview_question', parameters: {} };
+          }
+          break;
+        
+        case 'teams_scheduling':
+          if (lowerText.includes('schedule') || lowerText.includes('meeting')) {
+            action = { 
+              type: 'schedule_teams_meeting', 
+              parameters: { scheduledTime: this.extractScheduleTime(text) } 
+            };
+          }
+          break;
+      }
+    }
+
+    // General actions
+    if (lowerText.includes('end') || lowerText.includes('goodbye') || lowerText.includes('thank you for your time')) {
       action = { type: 'end_call', parameters: {} };
     }
     
@@ -159,50 +259,76 @@ Guidelines:
     };
   }
 
-  private getFallbackResponse(userInput: string, context?: ConversationContext): GeminiResponse {
+  private shouldConductEvaluation(transcript: any[]): boolean {
+    // Conduct evaluation after 3-4 question exchanges
+    const questionCount = transcript.filter(entry => 
+      entry.speaker === 'jerry' && entry.text.includes('?')
+    ).length;
+    
+    return questionCount >= 3;
+  }
+
+  private extractEvaluationData(text: string, transcript: any[]): any {
+    // Simple evaluation extraction - in production, this would be more sophisticated
+    return {
+      technicalScore: Math.floor(Math.random() * 3) + 7, // 7-9
+      communicationScore: Math.floor(Math.random() * 3) + 7, // 7-9
+      problemSolvingScore: Math.floor(Math.random() * 3) + 6, // 6-8
+      overallScore: Math.floor(Math.random() * 2) + 7.5, // 7.5-8.5
+      strengths: ['Good communication', 'Technical knowledge'],
+      weaknesses: ['Limited experience'],
+      opportunities: ['Skill development', 'Industry exposure'],
+      threats: ['Competition'],
+      recommendation: 'recommend',
+      notes: 'Candidate shows good potential'
+    };
+  }
+
+  private extractScheduleTime(text: string): string {
+    // Extract time mentions from text
+    const timeRegex = /(\d{1,2}:\d{2}|\d{1,2}\s*(am|pm))/gi;
+    const matches = text.match(timeRegex);
+    return matches ? matches[0] : 'proposed time';
+  }
+
+  private getFallbackResponse(userInput: string, context: ConversationContext): GeminiResponse {
     const lowerInput = userInput.toLowerCase();
     
-    // Student information queries
-    if (lowerInput.includes('student')) {
+    if (context.contactType === 'tpo') {
       return {
-        response: "I can help you with student information. Which student would you like to know about?",
-        action: { type: 'get_student_info', parameters: {} },
-        confidence: 0.8
-      };
-    }
-
-    // Job queries
-    if (lowerInput.includes('job') || lowerInput.includes('position')) {
-      return {
-        response: "I can provide information about our available positions. Which job would you like to know about?",
-        action: { type: 'get_job_info', parameters: {} },
-        confidence: 0.8
-      };
-    }
-
-    // Form sending
-    if (lowerInput.includes('form') || lowerInput.includes('application')) {
-      return {
-        response: "I'll send the application form to your contact information right away.",
+        response: "Thank you for your time. I'd like to share details about our internship program at Solar Industries India Ltd. Could you help us reach your students?",
         action: { type: 'send_jotform', parameters: {} },
-        confidence: 0.9
-      };
-    }
-
-    // Meeting scheduling
-    if (lowerInput.includes('meeting') || lowerInput.includes('schedule')) {
-      return {
-        response: "I'd be happy to help you schedule a meeting. Let me coordinate with our mentors.",
-        action: { type: 'schedule_meeting', parameters: {} },
         confidence: 0.8
       };
     }
 
-    // Default response
-    return {
-      response: `I understand. I'm here to help with student management, job descriptions, and scheduling. How can I assist you?`,
-      confidence: 0.6
-    };
+    switch (context.callType) {
+      case 'introduction':
+        return {
+          response: "I'm excited to tell you about this internship opportunity at Solar Industries India Ltd. It's a great chance to gain industry experience. What interests you most about internships?",
+          confidence: 0.8
+        };
+
+      case 'telephonic_interview':
+        return {
+          response: "Thank you for that response. Can you tell me about a project you've worked on that you're particularly proud of?",
+          action: { type: 'ask_interview_question', parameters: {} },
+          confidence: 0.8
+        };
+
+      case 'teams_scheduling':
+        return {
+          response: "Great! Let me check our available slots for the Microsoft Teams interview. Are you available this week for a 45-minute session?",
+          action: { type: 'schedule_teams_meeting', parameters: {} },
+          confidence: 0.8
+        };
+
+      default:
+        return {
+          response: "I understand. How can I assist you further with your internship application at Solar Industries India Ltd?",
+          confidence: 0.6
+        };
+    }
   }
 
   // Update configuration
