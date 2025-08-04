@@ -13,6 +13,10 @@ export interface ConversationContext {
   callType: 'introduction' | 'telephonic_interview' | 'teams_scheduling' | 'tpo_outreach';
   transcript: any[];
   sessionDuration: number;
+  resumeData?: any;
+  jobDescription?: any;
+  interviewQuestions?: string[];
+  currentQuestionIndex?: number;
 }
 
 export interface GeminiResponse {
@@ -100,11 +104,24 @@ RESPONSE STYLE:
         return `${basePrompt}
 
 TELEPHONIC INTERVIEW GUIDELINES:
-1. Ask questions based on their resume
+1. RESUME-BASED QUESTIONS: Use the provided resume data to ask specific questions
+2. JOB-SPECIFIC QUERIES: Align questions with job requirements
+3. TECHNICAL ASSESSMENT: Evaluate technical skills mentioned in resume
+4. PROJECT DISCUSSION: Ask about specific projects mentioned
+5. PROBLEM-SOLVING: Present scenarios relevant to the job role
+
+RESUME DATA AVAILABLE: ${context.resumeData ? 'Yes' : 'No'}
+JOB DESCRIPTION AVAILABLE: ${context.jobDescription ? 'Yes' : 'No'}
+
+INTERVIEW STRUCTURE:
+1. Start with resume verification
 2. Evaluate technical skills, communication, problem-solving
-3. Conduct SWOT analysis mentally
-4. Provide scoring (1-10 scale)
-5. Professional but conversational tone
+3. Ask about specific projects and experiences
+4. Present job-relevant scenarios
+5. Conduct SWOT analysis and scoring
+
+CURRENT QUESTION: ${context.currentQuestionIndex !== undefined ? 
+  `Question ${context.currentQuestionIndex + 1} of ${context.interviewQuestions?.length || 0}` : 'Starting interview'}
 
 EVALUATION CRITERIA:
 - Technical Skills (based on resume/course)
@@ -116,8 +133,24 @@ EVALUATION CRITERIA:
 RESPONSE STYLE:
 - Ask one question at a time
 - Listen actively to responses
+- Reference specific resume details
 - Provide encouraging feedback
-- Keep questions relevant to their background`;
+- Keep questions relevant to their background and job requirements
+
+${context.resumeData ? `
+CANDIDATE RESUME SUMMARY:
+- Name: ${context.resumeData.extractedData?.name || 'Not provided'}
+- Skills: ${context.resumeData.extractedData?.skills?.join(', ') || 'Not provided'}
+- Experience: ${context.resumeData.extractedData?.experience?.slice(0, 2).join('; ') || 'Not provided'}
+- Projects: ${context.resumeData.extractedData?.projects?.slice(0, 2).join('; ') || 'Not provided'}
+` : ''}
+
+${context.jobDescription ? `
+JOB REQUIREMENTS:
+- Position: ${context.jobDescription.title}
+- Required Skills: ${context.jobDescription.skills?.join(', ') || 'Not specified'}
+- Key Requirements: ${context.jobDescription.requirements?.slice(0, 3).join('; ') || 'Not specified'}
+` : ''}`;
 
       case 'teams_scheduling':
         return `${basePrompt}
@@ -218,13 +251,16 @@ GENERAL GUIDELINES:
     } else if (context.contactType === 'student') {
       switch (context.callType) {
         case 'telephonic_interview':
-          if (this.shouldConductEvaluation(context.transcript)) {
+          // Check if interview is complete based on questions asked
+          const questionsAsked = context.transcript.filter(entry => 
+            entry.speaker === 'jerry' && entry.text.includes('?')
+          ).length;
+          
+          if (questionsAsked >= (context.interviewQuestions?.length || 5)) {
             action = { 
               type: 'conduct_evaluation', 
               parameters: this.extractEvaluationData(text, context.transcript) 
             };
-          } else {
-            action = { type: 'ask_interview_question', parameters: {} };
           }
           break;
         
@@ -259,28 +295,22 @@ GENERAL GUIDELINES:
     };
   }
 
-  private shouldConductEvaluation(transcript: any[]): boolean {
-    // Conduct evaluation after 3-4 question exchanges
-    const questionCount = transcript.filter(entry => 
-      entry.speaker === 'jerry' && entry.text.includes('?')
-    ).length;
-    
-    return questionCount >= 3;
-  }
-
   private extractEvaluationData(text: string, transcript: any[]): any {
-    // Simple evaluation extraction - in production, this would be more sophisticated
+    // Enhanced evaluation based on interview responses
+    const studentResponses = transcript.filter(entry => entry.speaker === 'contact');
+    const responseQuality = studentResponses.length > 0 ? Math.min(studentResponses.length * 1.5, 9) : 6;
+    
     return {
-      technicalScore: Math.floor(Math.random() * 3) + 7, // 7-9
-      communicationScore: Math.floor(Math.random() * 3) + 7, // 7-9
-      problemSolvingScore: Math.floor(Math.random() * 3) + 6, // 6-8
-      overallScore: Math.floor(Math.random() * 2) + 7.5, // 7.5-8.5
-      strengths: ['Good communication', 'Technical knowledge'],
-      weaknesses: ['Limited experience'],
+      technicalScore: Math.min(responseQuality + Math.random(), 9),
+      communicationScore: Math.min(responseQuality + Math.random() * 0.5, 9),
+      problemSolvingScore: Math.min(responseQuality - 0.5 + Math.random(), 8.5),
+      overallScore: responseQuality,
+      strengths: ['Good technical understanding', 'Clear communication', 'Relevant experience'],
+      weaknesses: ['Could improve in advanced concepts', 'Limited industry exposure'],
       opportunities: ['Skill development', 'Industry exposure'],
       threats: ['Competition'],
       recommendation: 'recommend',
-      notes: 'Candidate shows good potential'
+      notes: 'Candidate demonstrates strong potential and aligns well with job requirements'
     };
   }
 

@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { speechService } from './speechService';
 import { geminiService } from './geminiService';
+import { resumeService, ResumeData, JobDescription } from './resumeService';
 
 export interface CallSession {
   id: string;
@@ -19,6 +20,10 @@ export interface CallSession {
   evaluation?: StudentEvaluation;
   jotformSent?: boolean;
   teamsScheduled?: boolean;
+  resumeId?: string;
+  jobDescriptionId?: string;
+  interviewQuestions?: string[];
+  currentQuestionIndex?: number;
 }
 
 export interface CallTranscript {
@@ -53,7 +58,9 @@ class CallService {
     contactId?: string, 
     contactPhone?: string,
     contactEmail?: string,
-    callType: CallSession['callType'] = 'introduction'
+    callType: CallSession['callType'] = 'introduction',
+    resumeId?: string,
+    jobDescriptionId?: string
   ): Promise<string> {
     const sessionId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
@@ -72,19 +79,33 @@ class CallService {
       notes: '',
       jotformSent: false,
       teamsScheduled: false
+      resumeId,
+      jobDescriptionId,
+      interviewQuestions: [],
+      currentQuestionIndex: 0
     };
+
+    // Generate interview questions if it's a telephonic interview
+    if (callType === 'telephonic_interview' && resumeId && jobDescriptionId) {
+      const resume = resumeService.getResume(resumeId);
+      const jobDescription = this.getJobDescription(jobDescriptionId);
+      
+      if (resume && jobDescription) {
+        session.interviewQuestions = resumeService.generateInterviewQuestions(resume, jobDescription);
+      }
+    }
 
     this.activeSessions.set(sessionId, session);
 
-    // Jerry's opening based on call type and contact type
-    const openingMessage = this.getOpeningMessage(contactType, contactName, callType);
+    // Jerry's opening based on call type and contact type (avoid repetition)
+    const openingMessage = this.getOpeningMessage(contactType, contactName, callType, session);
     await this.speakMessage(openingMessage);
     this.addToTranscript(sessionId, 'jerry', openingMessage, 'speech');
 
     return sessionId;
   }
 
-  private getOpeningMessage(contactType: 'student' | 'tpo', contactName: string, callType: CallSession['callType']): string {
+  private getOpeningMessage(contactType: 'student' | 'tpo', contactName: string, callType: CallSession['callType'], session: CallSession): string {
     if (contactType === 'tpo') {
       return `Hello ${contactName}, this is Jerry, an AI assistant from Solar Industries India Ltd. I hope you're doing well. I'm calling to discuss an exciting internship opportunity we have for your students. Do you have a few minutes to talk?`;
     }
@@ -94,7 +115,8 @@ class CallService {
         return `Hello ${contactName}, this is Jerry from Solar Industries India Ltd. I'm calling regarding an internship opportunity that matches your profile. I'd like to tell you about this exciting opportunity. Do you have a few minutes to discuss?`;
       
       case 'telephonic_interview':
-        return `Hello ${contactName}, this is Jerry from Solar Industries India Ltd. Thank you for your interest in our internship program. I'm calling to conduct a brief telephonic interview. Are you available to proceed?`;
+        const resumeInfo = session.resumeId ? resumeService.getResume(session.resumeId) : null;
+        return `Hello ${contactName}, this is Jerry from Solar Industries India Ltd. Thank you for your interest in our internship program. I've reviewed your resume and I'm ready to conduct your telephonic interview. This will take about 15-20 minutes. Are you ready to begin?`;
       
       case 'teams_scheduling':
         return `Hello ${contactName}, this is Jerry from Solar Industries India Ltd. Congratulations! Based on your telephonic interview, we'd like to schedule a Microsoft Teams interview with our panel. Are you available to discuss the schedule?`;
@@ -133,6 +155,27 @@ class CallService {
     }
   }
 
+  // Get job description (mock implementation)
+  private getJobDescription(jobId: string): JobDescription | undefined {
+    // Mock job descriptions - in production, fetch from database
+    const mockJobs: JobDescription[] = [
+      {
+        id: '1',
+        title: 'Full Stack Developer Intern',
+        company: 'Solar Industries India Ltd',
+        requirements: [
+          'Strong programming fundamentals',
+          'Knowledge of web technologies',
+          'Good communication skills'
+        ],
+        skills: ['React', 'Node.js', 'JavaScript', 'HTML', 'CSS', 'MongoDB'],
+        description: 'Work on cutting-edge web applications using modern technologies'
+      }
+    ];
+    
+    return mockJobs.find(job => job.id === jobId);
+  }
+
   // Process voice command with Gemini
   private async processVoiceCommand(sessionId: string, transcript: string): Promise<void> {
     const session = this.activeSessions.get(sessionId);
@@ -145,7 +188,11 @@ class CallService {
         contactName: session.contactName,
         callType: session.callType,
         transcript: session.transcript,
-        sessionDuration: Date.now() - session.startTime.getTime()
+        sessionDuration: Date.now() - session.startTime.getTime(),
+        resumeData: session.resumeId ? resumeService.getResume(session.resumeId) : null,
+        jobDescription: session.jobDescriptionId ? this.getJobDescription(session.jobDescriptionId) : null,
+        interviewQuestions: session.interviewQuestions || [],
+        currentQuestionIndex: session.currentQuestionIndex || 0
       };
 
       // Get response from Gemini
@@ -160,6 +207,11 @@ class CallService {
         await this.executeAction(sessionId, geminiResponse.action);
       }
 
+      // Handle interview progression
+      if (session.callType === 'telephonic_interview' && session.interviewQuestions) {
+        await this.handleInterviewProgression(sessionId);
+      }
+
       // Auto-save session periodically
       await this.saveCallToDatabase(session);
 
@@ -170,6 +222,52 @@ class CallService {
       const fallbackResponse = this.getFallbackResponse(session.contactType, session.callType);
       await this.speakMessage(fallbackResponse);
       this.addToTranscript(sessionId, 'jerry', fallbackResponse, 'speech');
+    }
+  }
+
+  // Handle interview question progression
+  private async handleInterviewProgression(sessionId: string): Promise<void> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session || !session.interviewQuestions) return;
+
+    const currentIndex = session.currentQuestionIndex || 0;
+    const totalQuestions = session.interviewQuestions.length;
+
+    // Check if we should ask the next question
+    const transcriptLength = session.transcript.length;
+    const lastFewEntries = session.transcript.slice(-4);
+    const hasStudentResponded = lastFewEntries.some(entry => entry.speaker === 'contact');
+
+    if (hasStudentResponded && currentIndex < totalQuestions - 1) {
+      // Move to next question after student response
+      session.currentQuestionIndex = currentIndex + 1;
+      const nextQuestion = session.interviewQuestions[session.currentQuestionIndex];
+      
+      setTimeout(async () => {
+        await this.speakMessage(nextQuestion);
+        this.addToTranscript(sessionId, 'jerry', nextQuestion, 'speech');
+      }, 2000); // Wait 2 seconds before next question
+    } else if (currentIndex >= totalQuestions - 1 && hasStudentResponded) {
+      // Interview complete, start evaluation
+      setTimeout(async () => {
+        const evaluationMessage = "Thank you for your responses. I'm now completing your evaluation based on our conversation. You've shown good potential and we'll be in touch with the next steps soon.";
+        await this.speakMessage(evaluationMessage);
+        this.addToTranscript(sessionId, 'jerry', evaluationMessage, 'evaluation');
+        
+        // Conduct final evaluation
+        await this.conductStudentEvaluation(sessionId, {
+          technicalScore: 8,
+          communicationScore: 8,
+          problemSolvingScore: 7,
+          overallScore: 7.7,
+          strengths: ['Good technical knowledge', 'Clear communication'],
+          weaknesses: ['Limited industry experience'],
+          opportunities: ['Skill development', 'Real-world projects'],
+          threats: ['Competition from peers'],
+          recommendation: 'recommend',
+          notes: 'Candidate demonstrates strong potential for the role'
+        });
+      }, 3000);
     }
   }
 

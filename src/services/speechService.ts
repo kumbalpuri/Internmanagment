@@ -58,15 +58,22 @@ export class SpeechService {
       // Set voice
       if (options.voice) {
         const selectedVoice = this.voices.find(voice => 
-          voice.name.includes(options.voice!) || voice.lang.includes(options.voice!)
+          voice.name === options.voice
+        ) || this.voices.find(voice => 
+          voice.name.toLowerCase().includes(options.voice!.toLowerCase())
+        ) || this.voices.find(voice => 
+          voice.lang.includes(options.voice!)
         );
+        
         if (selectedVoice) {
           utterance.voice = selectedVoice;
         }
       } else {
         // Default to a professional English voice
         const defaultVoice = this.voices.find(voice => 
-          voice.lang.startsWith('en') && voice.name.includes('Female')
+          voice.lang.startsWith('en') && (voice.name.toLowerCase().includes('female') || voice.name.toLowerCase().includes('samantha'))
+        ) || this.voices.find(voice => 
+          voice.lang.startsWith('en') && voice.name.toLowerCase().includes('google')
         ) || this.voices.find(voice => voice.lang.startsWith('en'));
         
         if (defaultVoice) {
@@ -82,9 +89,10 @@ export class SpeechService {
       utterance.onend = () => resolve();
       utterance.onerror = (event) => reject(new Error(`Speech synthesis error: ${event.error}`));
 
+      // Small delay to ensure proper voice loading
       setTimeout(() => {
         this.synthesis.speak(utterance);
-      }, 10);
+      }, 100);
     });
   }
 
