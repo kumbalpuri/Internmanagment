@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { CallLog } from '../../types';
 import { mockStudents, mockTPOs } from '../../data/mockData';
-import { Phone, PhoneCall, Clock, CheckCircle, Calendar, ExternalLink, Plus, Mic, AlertCircle, Database, RefreshCw } from 'lucide-react';
+import { Phone, PhoneCall, Clock, CheckCircle, Calendar, ExternalLink, Plus, Mic, AlertCircle, Database, RefreshCw, Upload, FileText } from 'lucide-react';
 import { VoiceCallInterface } from './VoiceCallInterface';
 import { callService } from '../../services/callService';
+import { resumeService, ResumeData } from '../../services/resumeService';
 
 export const CallManagement: React.FC = () => {
   const [calls, setCalls] = useState<CallLog[]>([]);
@@ -15,13 +16,40 @@ export const CallManagement: React.FC = () => {
     contactType: 'student' | 'tpo';
     contactName: string;
     callType: 'introduction' | 'telephonic_interview' | 'teams_scheduling' | 'tpo_outreach';
+    resumeId?: string;
+    jobDescriptionId?: string;
   } | null>(null);
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'checking'>('checking');
+  const [uploadedResumes, setUploadedResumes] = useState<ResumeData[]>([]);
+  const [showResumeUpload, setShowResumeUpload] = useState(false);
+  const [selectedResume, setSelectedResume] = useState<string>('');
+  const [selectedJobDescription, setSelectedJobDescription] = useState<string>('1');
 
   useEffect(() => {
     loadCalls();
     checkDatabaseConnection();
+    loadUploadedResumes();
   }, []);
+
+  const loadUploadedResumes = () => {
+    const resumes = resumeService.getAllResumes();
+    setUploadedResumes(resumes);
+  };
+
+  const handleResumeUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const resumeData = await resumeService.uploadResume(file);
+      setUploadedResumes(prev => [...prev, resumeData]);
+      setSelectedResume(resumeData.id);
+      alert('Resume uploaded and processed successfully!');
+    } catch (error) {
+      alert('Failed to upload resume. Please try again.');
+      console.error('Resume upload error:', error);
+    }
+  };
 
   const loadCalls = async () => {
     setLoading(true);
@@ -88,11 +116,20 @@ export const CallManagement: React.FC = () => {
       ? mockStudents.find(s => s.id === contactId)?.name || 'Unknown Student'
       : mockTPOs.find(t => t.id === contactId)?.name || 'Unknown TPO';
     
+    // For telephonic interviews, require resume upload
+    if (callType === 'telephonic_interview' && !selectedResume) {
+      alert('Please upload a resume before starting the telephonic interview.');
+      setShowResumeUpload(true);
+      return;
+    }
+    
     setVoiceCallData({
       contactId,
       contactType,
       contactName,
-      callType
+      callType,
+      resumeId: callType === 'telephonic_interview' ? selectedResume : undefined,
+      jobDescriptionId: callType === 'telephonic_interview' ? selectedJobDescription : undefined
     });
     setActiveCall(contactId);
   };
@@ -240,12 +277,88 @@ export const CallManagement: React.FC = () => {
           </div>
         </div>
 
+        {/* Resume Upload Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <FileText className="w-5 h-5 text-blue-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Resume Management</h2>
+            </div>
+            <label className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span>Upload Resume</span>
+              <input
+                type="file"
+                accept=".pdf,.txt,.doc,.docx"
+                onChange={handleResumeUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Resume for Interview
+              </label>
+              <select
+                value={selectedResume}
+                onChange={(e) => setSelectedResume(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select a resume...</option>
+                {uploadedResumes.map(resume => (
+                  <option key={resume.id} value={resume.id}>
+                    {resume.fileName} - {resume.extractedData.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Job Description
+              </label>
+              <select
+                value={selectedJobDescription}
+                onChange={(e) => setSelectedJobDescription(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="1">Full Stack Developer Intern - Solar Industries</option>
+                <option value="2">Data Science Intern - Solar Industries</option>
+                <option value="3">Mobile App Developer Intern - Solar Industries</option>
+              </select>
+            </div>
+          </div>
+
+          {uploadedResumes.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-medium text-gray-900">Uploaded Resumes:</h3>
+              {uploadedResumes.map(resume => (
+                <div key={resume.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <div className="font-medium text-gray-900">{resume.extractedData.name}</div>
+                    <div className="text-sm text-gray-600">{resume.fileName}</div>
+                    <div className="text-xs text-gray-500">
+                      Skills: {resume.extractedData.skills.slice(0, 3).join(', ')}
+                      {resume.extractedData.skills.length > 3 && ` +${resume.extractedData.skills.length - 3} more`}
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {new Date(resume.uploadedAt).toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Jerry Call Management */}
         <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl p-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl font-bold mb-2">Jerry - AI Call Agent</h2>
-              <p className="text-purple-100">All calls are initiated and managed by Jerry with professional expertise</p>
+              <p className="text-purple-100">Jerry conducts resume-based interviews and professional TPO outreach</p>
             </div>
             <button
               onClick={() => setShowScheduleModal(true)}
@@ -254,6 +367,21 @@ export const CallManagement: React.FC = () => {
               <Plus className="w-4 h-4" />
               <span>Schedule Jerry Call</span>
             </button>
+          </div>
+          
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="bg-white/10 rounded-lg p-3">
+              <div className="font-medium">Resume Analysis</div>
+              <div className="text-sm text-purple-100">Jerry reads and analyzes resumes</div>
+            </div>
+            <div className="bg-white/10 rounded-lg p-3">
+              <div className="font-medium">Tailored Questions</div>
+              <div className="text-sm text-purple-100">Questions based on resume & JD</div>
+            </div>
+            <div className="bg-white/10 rounded-lg p-3">
+              <div className="font-medium">Professional Evaluation</div>
+              <div className="text-sm text-purple-100">SWOT analysis and scoring</div>
+            </div>
           </div>
         </div>
 
@@ -364,13 +492,32 @@ export const CallManagement: React.FC = () => {
                   <select 
                     id="callType"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onChange={(e) => {
+                      const callType = e.target.value;
+                      if (callType === 'telephonic_interview' && !selectedResume) {
+                        alert('Please upload and select a resume for telephonic interviews.');
+                      }
+                    }}
                   >
                     <option value="introduction">Introduction Call</option>
-                    <option value="telephonic_interview">Telephonic Interview</option>
+                    <option value="telephonic_interview">Telephonic Interview (Requires Resume)</option>
                     <option value="teams_scheduling">Teams Scheduling</option>
                     <option value="tpo_outreach">TPO Outreach</option>
                   </select>
                 </div>
+                
+                {(document.getElementById('callType') as HTMLSelectElement)?.value === 'telephonic_interview' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="text-sm text-blue-800">
+                      <strong>Resume Required:</strong> Jerry will ask questions based on the uploaded resume and job description.
+                      {!selectedResume && (
+                        <div className="mt-2 text-red-600 font-medium">
+                          ⚠️ Please upload and select a resume before starting the interview.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Contact</label>

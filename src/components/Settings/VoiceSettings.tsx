@@ -157,10 +157,13 @@ export const VoiceSettings: React.FC = () => {
               <option value="">Default Voice</option>
               {voices.map((voice) => (
                 <option key={voice.name} value={voice.name}>
-                  {voice.name} ({voice.lang})
+                  {voice.name} ({voice.lang}) {voice.default ? '(Default)' : ''}
                 </option>
               ))}
             </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Selected voice will be used for Jerry's speech synthesis
+            </p>
           </div>
 
           <div>
@@ -223,9 +226,12 @@ export const VoiceSettings: React.FC = () => {
             />
             <button
               onClick={testTextToSpeech}
+              disabled={!selectedVoice && voices.length === 0}
               className={`flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-colors ${
                 isPlaying
                   ? 'bg-red-600 text-white hover:bg-red-700'
+                  : (!selectedVoice && voices.length === 0)
+                  ? 'bg-gray-400 text-white cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
             >
@@ -233,6 +239,11 @@ export const VoiceSettings: React.FC = () => {
               <span>{isPlaying ? 'Stop' : 'Test'}</span>
             </button>
           </div>
+          {selectedVoice && (
+            <div className="mt-2 text-sm text-green-600">
+              ✓ Using voice: {selectedVoice}
+            </div>
+          )}
         </div>
       </div>
 

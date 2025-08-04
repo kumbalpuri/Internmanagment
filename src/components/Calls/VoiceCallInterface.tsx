@@ -24,6 +24,8 @@ interface VoiceCallInterfaceProps {
   contactType: 'student' | 'tpo';
   contactName: string;
   callType: 'introduction' | 'telephonic_interview' | 'teams_scheduling' | 'tpo_outreach';
+  resumeId?: string;
+  jobDescriptionId?: string;
   onCallEnd: () => void;
 }
 
@@ -32,6 +34,8 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
   contactType,
   contactName,
   callType,
+  resumeId,
+  jobDescriptionId,
   onCallEnd
 }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -55,7 +59,9 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
           contactId, 
           undefined, // phone
           undefined, // email
-          callType
+          callType,
+          resumeId,
+          jobDescriptionId
         );
         setSessionId(newSessionId);
         setIsCallActive(true);
@@ -76,7 +82,7 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
         callService.endCall(sessionId);
       }
     };
-  }, [contactId, contactType, contactName, callType]);
+  }, [contactId, contactType, contactName, callType, resumeId, jobDescriptionId]);
 
   // Update session data and call duration
   useEffect(() => {
@@ -176,8 +182,8 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
 
   const getCallTypeDescription = () => {
     const descriptions = {
-      introduction: 'Jerry is introducing the internship opportunity',
-      telephonic_interview: 'Jerry is conducting a professional interview',
+      introduction: 'Jerry is introducing the internship opportunity tailored to your profile',
+      telephonic_interview: 'Jerry is conducting a resume-based telephonic interview with tailored questions',
       teams_scheduling: 'Jerry is scheduling the Microsoft Teams interview',
       tpo_outreach: 'Jerry is discussing internship opportunities with TPO'
     };
@@ -428,15 +434,15 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
               <>
                 <div className="bg-white p-2 rounded border border-purple-200">
                   <strong className="text-purple-700">Resume-based Questions</strong>
-                  <div className="text-gray-600">Technical & experience queries</div>
+                  <div className="text-gray-600">Questions based on uploaded resume</div>
                 </div>
                 <div className="bg-white p-2 rounded border border-purple-200">
-                  <strong className="text-purple-700">SWOT Analysis</strong>
-                  <div className="text-gray-600">Evaluate strengths & weaknesses</div>
+                  <strong className="text-purple-700">Job-Specific Questions</strong>
+                  <div className="text-gray-600">Aligned with job requirements</div>
                 </div>
                 <div className="bg-white p-2 rounded border border-purple-200">
-                  <strong className="text-purple-700">Scoring & Feedback</strong>
-                  <div className="text-gray-600">Professional evaluation</div>
+                  <strong className="text-purple-700">SWOT & Scoring</strong>
+                  <div className="text-gray-600">Professional evaluation & feedback</div>
                 </div>
               </>
             )}
@@ -460,9 +466,9 @@ export const VoiceCallInterface: React.FC<VoiceCallInterfaceProps> = ({
         )}
         
         <div className="mt-3 text-xs text-purple-700 bg-white p-3 rounded border border-purple-200">
-          <strong>💡 Professional AI Agent:</strong> Jerry maintains the highest standards of professionalism, 
-          adapts to each conversation naturally, and ensures all call objectives are met efficiently. 
-          All interactions are automatically saved to the database for record-keeping.
+          <strong>💡 Resume-Based Intelligence:</strong> Jerry has analyzed the uploaded resume and job description 
+          to create tailored interview questions. The conversation adapts based on the candidate's responses, 
+          ensuring a comprehensive evaluation. All interactions are automatically saved for record-keeping.
         </div>
       </div>
     </div>
